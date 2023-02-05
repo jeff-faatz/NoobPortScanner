@@ -23,7 +23,7 @@ from contextlib import contextmanager
 ascii_banner = pyfiglet.figlet_format("Noob Port Scanner")
 print(ascii_banner)
 
-class AsyncTCPScanner:
+class NoobPortScan:
 
     def __init__(self,
                  targets: Collection[str],
@@ -105,7 +105,7 @@ class OutputToScreen(Output):
         num_ports: int = len(self.scan.ports) * len(self.scan.targets)
         output: str = '    {: ^8}{: ^12}{: ^12}{: ^12}'
 
-        print(f'Starting Async Port Scanner at {ctime(time())}')
+        print(f'Starting Noob Port Scanner at {ctime(time())}')
         print(f'Scan report for {all_targets}')
 
         for address in self.scan.results.keys():
@@ -116,14 +116,14 @@ class OutputToScreen(Output):
                     continue
                 print(output.format(port, *port_info))
 
-        print(f"\nAsync TCP Connect scan of {num_ports} ports for "
+        print(f"\nNoob Port scan of {num_ports} ports for "
               f"{all_targets} completed in {self.scan.total_time:.2f} seconds")
 
         await asyncio.sleep(0)
 
 def process_cli_args(targets: str,
                      ports: str,
-                     *args, **kwargs) -> AsyncTCPScanner:
+                     *args, **kwargs) -> NoobPortScan:
 
     def _parse_ports(port_seq: str) -> Generator[int, Any, None]:
 
@@ -137,20 +137,20 @@ def process_cli_args(targets: str,
                 start, end = (int(port) for port in port.split('-'))
                 yield from range(start, end + 1)
 
-    return AsyncTCPScanner(targets=tuple(targets.split(',')),
+    return NoobPortScan(targets=tuple(targets.split(',')),
                            ports=tuple(_parse_ports(ports)),
                            *args, **kwargs)
 
 if __name__ == '__main__':
 
     usage = ('Usage examples:\n'
-             '1. python3 simple_async_scan.py google.com -p 80,443\n'
-             '2. python3 simple_async_scan.py '
+             '1. python3 NoobPortScanner.py google.com -p 80,443\n'
+             '2. python3 NoobPortScanner.py '
              '45.33.32.156,demo.testfire.net,18.192.172.30 '
              '-p 20-25,53,80,111,135,139,443,3306,5900')
 
     parser = argparse.ArgumentParser(
-        description='Simple asynchronous TCP Connect port scanner',
+        description='Noob Port Scanner',
         epilog=usage,
         formatter_class=argparse.RawTextHelpFormatter)
 
@@ -163,9 +163,9 @@ if __name__ == '__main__':
                         help="A comma-separated sequence of port numbers "
                              "and/or port ranges to scan on each target "
                              "specified, e.g., '20-25,53,80,443'.")
-    parser.add_argument('--timeout', type=float, default=10.0,
+    parser.add_argument('--timeout', type=float, default=1.0,
                         help='Time to wait for a response from a target before '
-                             'closing a connection (defaults to 10.0 seconds).')
+                             'closing a connection (defaults to 1.0 second).')
     parser.add_argument('--open', action='store_true',
                         help='Only show open ports in scan results.')
     cli_args = parser.parse_args()
