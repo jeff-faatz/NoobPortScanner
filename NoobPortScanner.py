@@ -12,6 +12,10 @@ import argparse
 import socket
 import threading
 import ipaddress
+import pyfiglet
+
+ascii_banner = pyfiglet.figlet_format("NoobPortScanner")
+print(ascii_banner)
 
 class PortScanner:
     def __init__(self, host, ports):
@@ -69,7 +73,7 @@ class NetworkScanner:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Scan a network to determine what hosts are active and what ports are open.')
     parser.add_argument('host', nargs='?', help='IP address or hostname of the target machine')
-    parser.add_argument('-p', '--port', help='Port number to scan (e.g. 80) or a range of ports to scan (e.g. 1-1024)')
+    parser.add_argument('-p', '--port', help='Port number to scan (e.g. 80) or a range of ports to scan (e.g. 1-1024) - Default is 1-1025')
     parser.add_argument('-o', '--output', help='Output file to write results to')
     parser.add_argument('-n', '--network', help='IP range to scan for active hosts (e.g. 192.168.1.1-192.168.1.254 or 192.168.1.0/24)')
     args = parser.parse_args()
