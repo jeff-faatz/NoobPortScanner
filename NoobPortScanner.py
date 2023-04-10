@@ -1,179 +1,116 @@
-#!/bin/python3
+#!/usr/bin/env python3
 
 #------------------------------------------------------#
-#----------- Noob Port Scanner  Version 0.1 -----------#
+#----------- Noob Port Scanner  Version 1.0 -----------#
 #--------------- Written by Jeff Faatz ----------------#
 #--------------- Created February 2023 ----------------#
 #----------- https://github.com/jeff-faatz ------------#
 #-------------- https://jeffreyfaatz.com --------------#
 #------------------------------------------------------#
 
-import pyfiglet
-import asyncio
 import argparse
 import socket
+import threading
+import ipaddress
 
-from typing import Generator, Any, Collection
-from abc import ABC, abstractmethod
-from time import ctime, time, perf_counter
-from collections import defaultdict
-from contextlib import contextmanager
-
-#Banner
-ascii_banner = pyfiglet.figlet_format("Noob Port Scanner")
-print(ascii_banner)
-
-class NoobPortScan:
-
-    def __init__(self,
-                 targets: Collection[str],
-                 ports: Collection[int],
-                 timeout: float):
-
-        self.targets = targets
+class PortScanner:
+    def __init__(self, host, ports):
+        self.host = host
         self.ports = ports
-        self.timeout = timeout
-        self.results = defaultdict(dict)
-        self.total_time = float()
-        self._loop = asyncio.get_event_loop()
-        self._observers = list()
+        self.open_ports = []
 
-    @property
-    def _scan_tasks(self):
-
-        return [self._scan_target_port(target, port) for port in self.ports
-                for target in self.targets]
-
-    @contextmanager
-    def _timer(self):
-
-        start_time: float = perf_counter()
-        yield
-        self.total_time = perf_counter() - start_time
-
-    def register(self, observer):
-
-        self._observers.append(observer)
-
-    async def _notify_all(self):
-
-        [asyncio.create_task(observer.update()) for observer in self._observers]
-
-    async def _scan_target_port(self, address: str, port: int) -> None:
-
+    def scan_port(self, port):
         try:
-            await asyncio.wait_for(
-                asyncio.open_connection(address, port, loop=self._loop),
-                timeout=self.timeout
-            )
-            port_state, reason = 'open', 'SYN/ACK'
-        except (ConnectionRefusedError, asyncio.TimeoutError, OSError) as e:
-            reasons = {
-                'ConnectionRefusedError': 'Connection refused',
-                'TimeoutError': 'No response',
-                'OSError': 'Network error'
-            }
-            port_state, reason = 'closed', reasons[e.__class__.__name__]
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            sock.connect((self.host, port))
+            self.open_ports.append(port)
+            sock.close()
+        except:
+            pass
+
+    def scan(self):
+        for port in self.ports:
+            t = threading.Thread(target=self.scan_port, args=(port,))
+            t.start()
+
+        for t in threading.enumerate():
+            if t != threading.current_thread():
+                t.join()
+
+        return self.open_ports
+
+class NetworkScanner:
+    def __init__(self, network):
+        self.network = network
+        self.hosts = []
+
+    def scan_host(self, ip):
         try:
-            service = socket.getservbyport(port)
-        except OSError:
-            service = 'unknown'
-        self.results[address].update({port: (port_state, service, reason)})
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(1)
+            sock.connect((str(ip), 80))
+            sock.close()
+            self.hosts.append(str(ip))
+        except:
+            pass
 
-    def execute(self):
-        with self._timer():
-            self._loop.run_until_complete(asyncio.wait(self._scan_tasks))
-        self._loop.run_until_complete(self._notify_all())
+    def scan(self):
+        for ip in self.network:
+            t = threading.Thread(target=self.scan_host, args=(ip,))
+            t.start()
 
-class Output(ABC):
+        for t in threading.enumerate():
+            if t != threading.current_thread():
+                t.join()
 
-    def __init__(self, subject):
-        subject.register(self)
-
-    @abstractmethod
-    async def update(self, *args, **kwargs) -> None:
-        pass
-
-class OutputToScreen(Output):
-    def __init__(self, subject, show_open_only: bool = False):
-        super().__init__(subject)
-        self.scan = subject
-        self.open_only = show_open_only
-
-    async def update(self) -> None:
-        all_targets: str = ' | '.join(self.scan.targets)
-        num_ports: int = len(self.scan.ports) * len(self.scan.targets)
-        output: str = '    {: ^8}{: ^12}{: ^12}{: ^12}'
-
-        print(f'Starting Noob Port Scanner at {ctime(time())}')
-        print(f'Scan report for {all_targets}')
-
-        for address in self.scan.results.keys():
-            print(f'\n[>] Results for {address}:')
-            print(output.format('PORT', 'STATE', 'SERVICE', 'REASON'))
-            for port, port_info in sorted(self.scan.results[address].items()):
-                if self.open_only is True and port_info[0] == 'closed':
-                    continue
-                print(output.format(port, *port_info))
-
-        print(f"\nNoob Port scan of {num_ports} ports for "
-              f"{all_targets} completed in {self.scan.total_time:.2f} seconds")
-
-        await asyncio.sleep(0)
-
-def process_cli_args(targets: str,
-                     ports: str,
-                     *args, **kwargs) -> NoobPortScan:
-
-    def _parse_ports(port_seq: str) -> Generator[int, Any, None]:
-
-        for port in port_seq.split(','):
-            try:
-                port = int(port)
-                if not 0 < port < 65536:
-                    raise SystemExit(f'Error: Invalid port number {port}.')
-                yield port
-            except ValueError:
-                start, end = (int(port) for port in port.split('-'))
-                yield from range(start, end + 1)
-
-    return NoobPortScan(targets=tuple(targets.split(',')),
-                           ports=tuple(_parse_ports(ports)),
-                           *args, **kwargs)
+        return self.hosts
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Scan a network to determine what hosts are active and what ports are open.')
+    parser.add_argument('host', nargs='?', help='IP address or hostname of the target machine')
+    parser.add_argument('-p', '--port', help='Port number to scan (e.g. 80) or a range of ports to scan (e.g. 1-1024)')
+    parser.add_argument('-o', '--output', help='Output file to write results to')
+    parser.add_argument('-n', '--network', help='IP range to scan for active hosts (e.g. 192.168.1.1-192.168.1.254 or 192.168.1.0/24)')
+    args = parser.parse_args()
 
-    usage = ('Usage examples:\n'
-             '1. python3 NoobPortScanner.py google.com -p 80,443\n'
-             '2. python3 NoobPortScanner.py '
-             '45.33.32.156,demo.testfire.net,18.192.172.30 '
-             '-p 20-25,53,80,111,135,139,443,3306,5900')
+    if args.network:
+        if '-' in args.network:
+            start_ip, end_ip = args.network.split('-')
+            network = list(ipaddress.summarize_address_range(ipaddress.IPv4Address(start_ip), ipaddress.IPv4Address(end_ip)))
+        else:
+            network = [ip for ip in ipaddress.IPv4Network(args.network)]
 
-    parser = argparse.ArgumentParser(
-        description='Noob Port Scanner',
-        epilog=usage,
-        formatter_class=argparse.RawTextHelpFormatter)
+        scanner = NetworkScanner(network)
+        active_hosts = scanner.scan()
 
-    parser.add_argument('targets', type=str, metavar='ADDRESSES',
-                        help="A comma-separated sequence of IP addresses "
-                             "and/or domain names to scan, e.g., "
-                             "'45.33.32.156,65.61.137.117,"
-                             "testphp.vulnweb.com'.")
-    parser.add_argument('-p', '--ports', type=str, required=True,
-                        help="A comma-separated sequence of port numbers "
-                             "and/or port ranges to scan on each target "
-                             "specified, e.g., '20-25,53,80,443'.")
-    parser.add_argument('--timeout', type=float, default=1.0,
-                        help='Time to wait for a response from a target before '
-                             'closing a connection (defaults to 1.0 second).')
-    parser.add_argument('--open', action='store_true',
-                        help='Only show open ports in scan results.')
-    cli_args = parser.parse_args()
+        if len(active_hosts) > 0:
+            print('The following hosts are online:')
+            print(active_hosts)
+        else:
+            print('No active hosts found.')
+    else:
+        host = args.host
+        if args.port:
+            if '-' in args.port:
+                start_port, end_port = args.port.split('-')
+                ports = range(int(start_port), int(end_port) + 1)
+            else:
+                ports = [int(args.port)]
+        else:
+            ports = range(1, 1025)
 
-    scanner = process_cli_args(targets=cli_args.targets,
-                               ports=cli_args.ports,
-                               timeout=cli_args.timeout)
+        scanner = PortScanner(host, ports)
+        open_ports = scanner.scan()
 
-    to_screen = OutputToScreen(subject=scanner,
-                               show_open_only=cli_args.open)
-    scanner.execute()
+        if len(open_ports) > 0:
+            print(f'The following ports are open on {host}:')
+            print(open_ports)
+            if args.output:
+                with open(args.output, 'w') as f:
+                    f.write(f'The following ports are open on {host}:\n')
+                    for port in open_ports:
+                        f.write(f'{ports}\n')
+						
+        else:
+            print(f'No open ports found on {host}.')
