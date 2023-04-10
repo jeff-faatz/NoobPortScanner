@@ -90,7 +90,7 @@ if __name__ == '__main__':
 
         if len(active_hosts) > 0:
             print('The following hosts are online:')
-            print(active_hosts)
+            print(active_hosts, sep='\n')
         else:
             print('No active hosts found.')
     else:
@@ -109,7 +109,7 @@ if __name__ == '__main__':
 
         if len(open_ports) > 0:
             print(f'The following ports are open on {host}:')
-            print(open_ports)
+            print(open_ports, sep='\n')
             if args.output:
                 with open(args.output, 'w') as f:
                     f.write(f'The following ports are open on {host}:\n')
